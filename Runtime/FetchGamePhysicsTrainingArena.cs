@@ -47,6 +47,17 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
         helper.CreateTag(TAG_GROUND);
         helper.CreateTag(TAG_OBSTACLE);
 
+        if (!name.StartsWith("TrainingArena"))
+        {
+            name = "TrainingArena";
+        }
+
+        Reparent();
+
+        FindTurfMetrics();
+        FindRampMetrics();
+        FindBallMetrics();
+
         string title = "FetchGamePhysicsTraining Setup";
         string message = "Use an obstacle during training?";
         bool useObstacle = helper.DisplayDialog(title, message, "Yes", "No");
@@ -58,17 +69,6 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
         {
             DestroyObstacle();
         }
-
-        if (!name.StartsWith("TrainingArena"))
-        {
-            name = "TrainingArena";
-        }
-
-        Reparent();
-
-        FindTurfMetrics();
-        FindRampMetrics();
-        FindBallMetrics();
     }
 
     private void Reparent()
@@ -322,14 +322,9 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
     private void PlaceObstacle()
     {
         GameObject obstacle = Janelia.EasyMLRuntimeUtils.FindChildWithTag(gameObject, TAG_OBSTACLE);
-        if (obstacle == null)
-        {
-            return;
-        }
-
         GameObject ramp = Janelia.EasyMLRuntimeUtils.FindChildWithTag(gameObject, TAG_RAMP);
         GameObject agent = Janelia.EasyMLRuntimeUtils.FindChildWithTag(gameObject, Janelia.EasyMLAgent.TAG_AGENT);
-        if ((ramp == null) || (agent == null))
+        if ((obstacle == null) || (ramp == null) || (agent == null))
         {
             return;
         }
@@ -388,7 +383,13 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
 
     private GameObject CreateObstacle()
     {
-        GameObject obstacle = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        GameObject obstacle = Janelia.EasyMLRuntimeUtils.FindChildWithTag(gameObject, TAG_OBSTACLE);
+        if (obstacle != null)
+        {
+            return obstacle;
+        }
+
+        obstacle = GameObject.CreatePrimitive(PrimitiveType.Cube);
         obstacle.name = "Obstacle";
         obstacle.tag = TAG_OBSTACLE;
         obstacle.transform.parent = transform;
