@@ -13,7 +13,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
 {
     public override string BehaviorName { get; protected set; } = "FetchGamePhysics";
 
-    public override int VectorObservationSize { get; protected set; } = 6;
+    public override int VectorObservationSize { get; protected set; } = 0;
 
 #if false
     // Overriding this virtual property would be an alternative to setting its value in `Setup`, but
@@ -113,6 +113,11 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     /// <param name="sensor">The vector sensor</param>
     public override void CollectObservations(VectorSensor sensor)
     {
+        if (VectorObservationSize == 0)
+        {
+            return;
+        }
+        
         float ballObserved = IsBallObservable() ? 1 : 0;
         if ((_ball == null) || (_ballRigidBody == null) || (ballObserved == 0))
         {
