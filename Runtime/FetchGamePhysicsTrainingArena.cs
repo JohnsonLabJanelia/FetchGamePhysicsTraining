@@ -305,6 +305,10 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
             bool safe = false;
             float angle = 0;
             int attempts = 0;
+            GameObject ball = Janelia.EasyMLRuntimeUtils.FindChildWithTag(gameObject, TAG_BALL);
+            float ballFetchedThreshold = Academy.Instance.EnvironmentParameters.GetWithDefault("ball_fetched_threshold", 0.02f);
+            float thresholdDistance = ballFetchedThreshold * TurfRadius * 2.0f;
+            
             while (!safe && (attempts++ < 100))
             {
                 angle = UnityEngine.Random.Range(0, 360);
@@ -331,7 +335,8 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
                 // Continue trying placements until there is a safe configuration, with the agent's
                 // body not overlapping the ramp.
                 float rampPadding = Mathf.Max(_rampSize.x, _rampSize.z);
-                safe = Vector3.Distance(ramp.transform.localPosition, p) > padding + rampPadding;
+                float distanceToBall = Vector3.Distance(agent.transform.position, ball.transform.position);
+                safe = (Vector3.Distance(ramp.transform.localPosition, p) > padding + rampPadding) & (distanceToBall > thresholdDistance);
             }
 
             float angleLocalY = angle + 180;
