@@ -149,6 +149,13 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
         Deactivate("Publisher");
         Deactivate("Canvas");
         Deactivate("EventSystem");
+        Deactivate("Bumblebee");
+        Deactivate("Grimlock");
+        Deactivate("Optimus");
+        Deactivate("ExprimenterView");
+        Deactivate("HollowCyl");
+        Deactivate("Table");
+        Deactivate("VentionFrame");
     }
 
     private void Deactivate(string name)

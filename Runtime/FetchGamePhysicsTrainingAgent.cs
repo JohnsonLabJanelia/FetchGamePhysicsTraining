@@ -57,20 +57,29 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
 
         base.Setup(helper);
 
+        // Get rid of the ray sensor as this agent uses strictly visual observations.
         Transform raySensorTransform = transform.Find("RaysForward");
         if (raySensorTransform != null)
         {
-            raySensorTransform.localPosition = new Vector3(0, BodyScale.y, BodyScale.z / 2);
+            DestroyImmediate(raySensorTransform.gameObject);
         }
 
-        // With timestep of 0.02, 4 stacked observations amounts to raysensor observation of the past 0.5 second.
-        GameObject raySensor = GameObject.Find("RaysForward");
-        RayPerceptionSensorComponent3D raySensorComponent = raySensor.GetComponent<RayPerceptionSensorComponent3D>();
-        raySensorComponent.ObservationStacks = 4;
+        // Use the ceiling camera for observation.
+        CameraSensorComponent cameraSensor = gameObject.GetComponent<CameraSensorComponent>();
+        if (cameraSensor == null)
+        {
+            cameraSensor = gameObject.AddComponent<CameraSensorComponent>();
+        }
+        if (cameraSensor.Camera == null)
+        {
+            GameObject ceilingCamera = GameObject.Find("AgentCamera");
+            cameraSensor.Camera = ceilingCamera.GetComponent<Camera>();
+            cameraSensor.Grayscale = true;
+            cameraSensor.Width = 64;
+            cameraSensor.Height = 64;
+            cameraSensor.ObservationStacks = 2; // Use two stacked observations; have tried 4 but it was too slow.
+        }
 
-        BehaviorParameters behavior = GetComponent<BehaviorParameters>() as BehaviorParameters;
-        behavior.BrainParameters.NumStackedVectorObservations = 4;
-        
         moveForce = 7.0f;
     }
 
