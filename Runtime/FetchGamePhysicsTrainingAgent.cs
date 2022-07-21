@@ -34,9 +34,25 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     }
     private Vector3 _moveForwardDirection;
 
-    private GameObject _ball;
-    private Rigidbody _ballRigidBody;
-    private float fieldOfViewDegree;
+    /// <summary>
+    /// The number of discrete action branches. 
+    /// This agent only has jumping as discrete action, with two choices: either to jump or not to jump.
+    /// </summary>
+    public override int[] DiscreteBranchSize
+    {
+        get { return _jumpDiscreteBranchSize; }
+        protected set { _jumpDiscreteBranchSize = value; }
+    } 
+    private int[] _jumpDiscreteBranchSize = new int[] { 2 };
+
+    // This value cannot be too large or the agent flies off the arena.
+    [Tooltip("Force to apply when jumping")]
+    public float jumpForce;
+
+    protected GameObject _ball;
+    protected Rigidbody _ballRigidBody;
+    protected float fieldOfViewDegree;
+    protected bool isGrounded;
 
     /// <summary>
     /// Called after the Setup function for <see cref="FetchGamePhysicsTrainingArena"/>).
@@ -46,23 +62,13 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     {
         // Before calling `EasyMLAgentGrounded.Setup` (as `base.Setup`) override some parameters
         // it will use.
-        ChildSensorForwardDetectableTags = new List<string>()
-        {
-            FetchGamePhysicsTrainingArena.TAG_BOUNDARY,
-            FetchGamePhysicsTrainingArena.TAG_RAMP,
-            FetchGamePhysicsTrainingArena.TAG_OBSTACLE
-        };
+        UseChildSensorForward = false;
         ChildSensorForwardRayLength = GetTurfDiameter();
         BodyColor = "#4b3c39";
 
         base.Setup(helper);
 
-        // Get rid of the ray sensor as this agent uses strictly visual observations.
-        Transform raySensorTransform = transform.Find("RaysForward");
-        if (raySensorTransform != null)
-        {
-            DestroyImmediate(raySensorTransform.gameObject);
-        }
+        gameObject.name = "AgentJump";
 
         // Use the ceiling camera for observation.
         CameraSensorComponent cameraSensor = gameObject.GetComponent<CameraSensorComponent>();
@@ -80,7 +86,20 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
             cameraSensor.ObservationStacks = 2; // Use two stacked observations; have tried 4 but it was too slow.
         }
 
+        // Set the field of view degree (single direction) from the MaxRayDegree used by the raySensor.
+        GameObject raySensor = GameObject.Find("RaysForward");
+        fieldOfViewDegree = raySensor != null ? raySensor.GetComponent<RayPerceptionSensorComponent3D>().MaxRayDegrees : 30;
+        
+        // Make the agent camera view be consistent with the actual field of view set.
+        Camera agentCamera = GameObject.Find("AgentCamera").GetComponent<Camera>();
+        agentCamera.fieldOfView = fieldOfViewDegree / agentCamera.aspect * 2;
+        
+        // Freeze the x and z rotation of the agent so that it doesn't flip over.
+        _agentRigidbody = GetComponent<Rigidbody>();
+        _agentRigidbody.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+
         moveForce = 7.0f;
+        jumpForce = 2.0f;
     }
 
     /// <summary>
@@ -92,6 +111,13 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     {
         // The `EasyMLAgentGround` base class handles everything except the assignment of rewards.
         base.OnActionReceived(actions);
+
+        // Make sure the agent only jumps when it is grounded and only jump once.
+        if (actions.DiscreteActions[0] == 1 && CheckGrounded())
+        {
+            _agentRigidbody.AddForce(transform.up * jumpForce, ForceMode.Impulse);
+            isGrounded = false;
+        }
 
         // https://github.com/Unity-Technologies/ml-agents/blob/main/docs/Learning-Environment-Design-Agents.md#rewards-summary--best-practices
         // "If you want the agent to finish a task quickly, it is often helpful to provide a small penalty every step
@@ -114,6 +140,20 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
                 AddFetchedReward();
             }
         }
+    }
+
+    public override void Heuristic(in ActionBuffers actionsOut)
+    {
+        base.Heuristic(actionsOut);
+        int jump = 0;
+
+        if (Input.GetKey(KeyCode.Space))
+        {
+            jump = 1;
+        }
+
+        ActionSegment<int> discreteActions = actionsOut.DiscreteActions;
+        discreteActions[0] = jump;
     }
 
     /// <summary>
@@ -187,14 +227,6 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         _ball = Janelia.EasyMLRuntimeUtils.FindChildWithTag(arena, FetchGamePhysicsTrainingArena.TAG_BALL);
 
         _ballRigidBody = _ball.GetComponent<Rigidbody>();
-
-        // Set the field of view degree (single direction) from the MaxRayDegree used by the raySensor.
-        GameObject raySensor = GameObject.Find("RaysForward");
-        fieldOfViewDegree = raySensor != null ? raySensor.GetComponent<RayPerceptionSensorComponent3D>().MaxRayDegrees : 70;
-        
-        // Make the agent camera view be consistent with the actual field of view set.
-        Camera agentCamera = GameObject.Find("AgentCamera").GetComponent<Camera>();
-        agentCamera.fieldOfView = fieldOfViewDegree / agentCamera.aspect * 2;
     }
 
     /// <summary>
@@ -204,6 +236,13 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     private void OnCollisionEnter(Collision collision)
     {
         Collider c = collision.collider;
+
+        if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_GROUND) || c.CompareTag(FetchGamePhysicsTrainingArena.TAG_RAMP))
+        {
+            // Agent is grounded.
+            isGrounded = true;
+        }
+
         if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_BALL))
         {
             // Disable any collision response that might put the ball or agent in a bad position.
@@ -251,6 +290,12 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     //     }
     // }
 
+    public override void OnEpisodeBegin()
+    {
+        base.OnEpisodeBegin();
+        isGrounded = true;
+    }
+
     private void AddFetchedReward()
     {
         Vector3 toBall = (_ball.transform.position - transform.position);
@@ -290,5 +335,10 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         bool blocked = Physics.Raycast(rayInit, toBall, out hit, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
         if (blocked) Debug.Log("Raycast hit " + hit.collider);
         return atFront && !blocked;
+    }
+
+    public bool CheckGrounded()
+    {
+        return isGrounded;
     }
 }

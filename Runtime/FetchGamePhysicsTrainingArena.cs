@@ -346,6 +346,7 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
                 safe = (Vector3.Distance(ramp.transform.localPosition, p) > padding + rampPadding) & (distanceToBall > thresholdDistance);
             }
 
+            // Make the agent face the center of the arena.
             float angleLocalY = angle + 180;
             if (angleLocalY > 360)
             {
