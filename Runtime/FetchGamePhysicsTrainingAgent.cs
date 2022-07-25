@@ -38,12 +38,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     /// The number of discrete action branches. 
     /// This agent only has jumping as discrete action, with two choices: either to jump or not to jump.
     /// </summary>
-    public override int[] DiscreteBranchSize
-    {
-        get { return _jumpDiscreteBranchSize; }
-        protected set { _jumpDiscreteBranchSize = value; }
-    } 
-    private int[] _jumpDiscreteBranchSize = new int[] { 2 };
+    public override int[] DiscreteBranchSize { get; protected set; } = new int[] { 2 };
 
     // This value cannot be too large or the agent flies off the arena.
     [Tooltip("Force to apply when jumping")]
@@ -51,7 +46,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
 
     protected GameObject _ball;
     protected Rigidbody _ballRigidBody;
-    protected float fieldOfViewDegree;
+    public float fieldOfViewDegree { get; protected set; }
     protected bool isGrounded;
 
     /// <summary>
@@ -237,7 +232,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     {
         Collider c = collision.collider;
 
-        if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_GROUND) || c.CompareTag(FetchGamePhysicsTrainingArena.TAG_RAMP))
+        if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_GROUND) || c.CompareTag(FetchGamePhysicsTrainingArena.TAG_RAMP) || c.CompareTag(FetchGamePhysicsTrainingArena.TAG_OBSTACLE))
         {
             // Agent is grounded.
             isGrounded = true;
@@ -294,6 +289,10 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     {
         base.OnEpisodeBegin();
         isGrounded = true;
+
+        // Stop agent's movement.
+        _agentRigidbody.velocity = Vector3.zero;
+        _agentRigidbody.angularVelocity = Vector3.zero;
     }
 
     private void AddFetchedReward()
@@ -311,6 +310,12 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     {
         FetchGamePhysicsTrainingArena fetchArena = GetComponentInParent<FetchGamePhysicsTrainingArena>();
         return (fetchArena != null) ? 2.0f * fetchArena.TurfRadius : 1.0f;
+    }
+
+    private FetchGamePhysicsTrainingArena.TaskType GetTaskType()
+    {
+        FetchGamePhysicsTrainingArena fetchArena = GetComponentInParent<FetchGamePhysicsTrainingArena>();
+        return fetchArena.taskType;
     }
 
     private float SignedAngleNormalized(Vector3 a, Vector3 b)
