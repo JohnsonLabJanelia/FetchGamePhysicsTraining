@@ -19,6 +19,9 @@ behaviors:
       vis_encode_type: resnet
       goal_conditioning_type: hyper
       deterministic: false
+      memory:
+        memory_size: 32
+        sequence_length: 16
     reward_signals:
       extrinsic:
         gamma: 0.99
@@ -228,3 +231,83 @@ environment_parameters:
         value: 0.3
       - name: LessonFinal
         value: 0.5
+    path_length_penalty:
+    curriculum:
+      - name: LessonA
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 250
+          threshold: 0
+        value: 0.0
+      - name: LessonB
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 200
+          threshold: 0.2
+        value: 0.1
+      - name: LessonC
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 150
+          threshold: 0.4
+        value: 0.15
+      - name: LessonD
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 150
+          threshold: 0.6
+        value: 0.18
+      - name: LessonE
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.7
+        value: 0.2
+      - name: LessonF
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.75
+        value: 0.25
+      - name: LessonG
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.8
+        value: 0.5
+      - name: LessonFinal
+        value: 0.8
+  num_containers:
+    curriculum:
+      - name: LessonA
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 250
+          threshold: 0
+        value: 1
+      - name: LessonG
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.8
+        value: 2
+      - name: LessonFinal
+        value: 3

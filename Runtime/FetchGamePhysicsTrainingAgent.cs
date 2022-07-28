@@ -47,7 +47,12 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     protected GameObject _ball;
     protected Rigidbody _ballRigidBody;
     public float fieldOfViewDegree { get; protected set; }
-    protected bool isGrounded;
+    protected bool _isGrounded;
+    protected Vector3 _lastPosition;
+    protected float _episodePathLength;
+    protected float _shortestPathLength;
+    protected FetchGamePhysicsTrainingArena.TaskType _taskType;
+    protected GameObject _targetContainer;
 
     /// <summary>
     /// Called after the Setup function for <see cref="FetchGamePhysicsTrainingArena"/>).
@@ -111,8 +116,12 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         if (actions.DiscreteActions[0] == 1 && CheckGrounded())
         {
             _agentRigidbody.AddForce(transform.up * jumpForce, ForceMode.Impulse);
-            isGrounded = false;
+            _isGrounded = false;
         }
+
+        // Count the distance traveled since the last timestep and update the last position.
+        _episodePathLength += Vector3.Distance(transform.position, _lastPosition);
+        _lastPosition = transform.position;
 
         // https://github.com/Unity-Technologies/ml-agents/blob/main/docs/Learning-Environment-Design-Agents.md#rewards-summary--best-practices
         // "If you want the agent to finish a task quickly, it is often helpful to provide a small penalty every step
@@ -120,7 +129,8 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         // with the end of the episode by calling EndEpisode() on the agent when it has accomplished its goal."
         // Also, the total penalty over all the steps should not exceed 1.
 
-        float perStepPenalty = -1.0f / (float)MaxStep;
+        float pathLengthPenaltyProportion = Academy.Instance.EnvironmentParameters.GetWithDefault("path_length_penalty", 0.8f);
+        float perStepPenalty = -1.0f * (1 - pathLengthPenaltyProportion) / (float)MaxStep;
         AddReward(perStepPenalty);
 
         if (_ball != null)
@@ -222,6 +232,10 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         _ball = Janelia.EasyMLRuntimeUtils.FindChildWithTag(arena, FetchGamePhysicsTrainingArena.TAG_BALL);
 
         _ballRigidBody = _ball.GetComponent<Rigidbody>();
+        
+        // Set the field of view degree (single direction) from the MaxRayDegree used by the raySensor.
+        GameObject raySensor = GameObject.Find("RaysForward");
+        fieldOfViewDegree = raySensor != null ? raySensor.GetComponent<RayPerceptionSensorComponent3D>().MaxRayDegrees : 30;
     }
 
     /// <summary>
@@ -235,7 +249,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_GROUND) || c.CompareTag(FetchGamePhysicsTrainingArena.TAG_RAMP) || c.CompareTag(FetchGamePhysicsTrainingArena.TAG_OBSTACLE))
         {
             // Agent is grounded.
-            isGrounded = true;
+            _isGrounded = true;
         }
 
         if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_BALL))
@@ -247,6 +261,17 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
             if (trainingMode)
             {
                 AddFetchedReward();
+            }
+        }
+
+        // Penalize the agent for colliding with the wrong container.
+        if (_taskType == FetchGamePhysicsTrainingArena.TaskType.containment)
+        {
+            if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_CONTAINER) && c.gameObject != _targetContainer)
+            {
+                SetReward(-1.0f);
+                Debug.Log(transform.parent.name + " FetchAgent.OnCollisionEnter: Penalize for colliding with wrong container and end episode.");
+                EndEpisode();
             }
         }
 
@@ -288,21 +313,43 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     public override void OnEpisodeBegin()
     {
         base.OnEpisodeBegin();
-        isGrounded = true;
+        _isGrounded = true;
 
         // Stop agent's movement.
         _agentRigidbody.velocity = Vector3.zero;
         _agentRigidbody.angularVelocity = Vector3.zero;
+
+        // Record the last position of the agent and reset the path length record.
+        _lastPosition = transform.position;
+        _episodePathLength = 0;
+
+        // Get current task type.
+        _taskType = GetTaskType();
+
+        // Get the target container if applicable.
+        FetchGamePhysicsTrainingArena fetchArena = GetComponentInParent<FetchGamePhysicsTrainingArena>();
+        if (_taskType == FetchGamePhysicsTrainingArena.TaskType.containment)
+        {
+            _targetContainer = fetchArena.targetContainer;
+        }
+
+        _shortestPathLength = fetchArena.GetShortestPathLength();
     }
 
     private void AddFetchedReward()
     {
         Vector3 toBall = (_ball.transform.position - transform.position);
-        float speed_bonus_proportion = Academy.Instance.EnvironmentParameters.GetWithDefault("speed_bonus", 0.8f);
-        float orientation_bonus = 0.5f * (1 - speed_bonus_proportion) * Mathf.Clamp01(Vector3.Dot(transform.forward.normalized, toBall.normalized));
-        float speed_bonus = 0.5f * speed_bonus_proportion * (1 - StepCount / MaxStep);
-        AddReward(0.5f + orientation_bonus + speed_bonus);
-        Debug.Log(transform.parent.name + " successfully complete task with reward: " + GetCumulativeReward());
+        float speedBonusProportion = Academy.Instance.EnvironmentParameters.GetWithDefault("speed_bonus", 0.8f);
+        float orientationBonus = 0.5f * (1 - speedBonusProportion) * Mathf.Clamp01(Vector3.Dot(transform.forward.normalized, toBall.normalized));
+        float speedBonus = 0.5f * speedBonusProportion * (1 - StepCount / MaxStep);
+        AddReward(0.5f + orientationBonus + speedBonus);
+        
+        // Penalize for the length of the path taken.
+        float pathLengthPenaltyProportion = Academy.Instance.EnvironmentParameters.GetWithDefault("path_length_penalty", 0.8f);
+        float standardizedPathLength = Mathf.Clamp((_episodePathLength - _shortestPathLength) / GetTurfDiameter(), 0, 1);
+        AddReward(-pathLengthPenaltyProportion * standardizedPathLength);
+        
+        Debug.Log(transform.parent.name + " successfully complete task with reward: " + GetCumulativeReward() + " and path length: " + _episodePathLength + " with a shortest path length " + _shortestPathLength);
         EndEpisode();
     }
 
@@ -344,6 +391,6 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
 
     public bool CheckGrounded()
     {
-        return isGrounded;
+        return _isGrounded;
     }
 }

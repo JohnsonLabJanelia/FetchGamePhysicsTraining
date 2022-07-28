@@ -16,7 +16,7 @@ behaviors:
       normalize: false
       hidden_units: 256
       num_layers: 2
-      vis_encode_type: resnet
+      vis_encode_type: simple
       goal_conditioning_type: hyper
       deterministic: false
     reward_signals:
@@ -27,7 +27,7 @@ behaviors:
           normalize: false
           hidden_units: 128
           num_layers: 2
-          vis_encode_type: resnet
+          vis_encode_type: simple
           goal_conditioning_type: hyper
           deterministic: false
       rnd:
@@ -38,12 +38,12 @@ behaviors:
           normalize: false
           hidden_units: 128
           num_layers: 2
-          vis_encode_type: resnet
+          vis_encode_type: simple
           goal_conditioning_type: hyper
           deterministic: false
     keep_checkpoints: 5
     checkpoint_interval: 10000
-    max_steps: 15000000
+    max_steps: 500000000
     time_horizon: 128
     summary_freq: 10000
     threaded: false
@@ -167,7 +167,7 @@ environment_parameters:
           threshold: 0.8
         value: 0.025
       - name: LessonFinal
-        value: 0.0
+        value: 0.02
   speed_bonus:
     curriculum:
       - name: LessonA
@@ -228,3 +228,63 @@ environment_parameters:
         value: 0.3
       - name: LessonFinal
         value: 0.5
+  movement_bonus:
+    curriculum:
+      - name: LessonA
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 250
+          threshold: 0
+        value: 0.9
+      - name: LessonB
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 200
+          threshold: 0.2
+        value: 0.8
+      - name: LessonC
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 150
+          threshold: 0.4
+        value: 0.7
+      - name: LessonD
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 150
+          threshold: 0.6
+        value: 0.6
+      - name: LessonE
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.7
+        value: 0.5
+      - name: LessonF
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.75
+        value: 0.3
+      - name: LessonG
+        completion_criteria:
+          measure: reward
+          behavior: FetchGamePhysics
+          signal_smoothing: true
+          min_lesson_length: 100
+          threshold: 0.8
+        value: 0.1
+      - name: LessonFinal
+        value: 0
