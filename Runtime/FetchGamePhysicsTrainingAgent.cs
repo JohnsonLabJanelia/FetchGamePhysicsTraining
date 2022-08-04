@@ -13,7 +13,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
 {
     public override string BehaviorName { get; protected set; } = "FetchGamePhysics";
 
-    public override int VectorObservationSize { get; protected set; } = 0;
+    public override int VectorObservationSize { get; protected set; } = 1;
 
 #if false
     // Overriding this virtual property would be an alternative to setting its value in `Setup`, but
@@ -53,6 +53,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
     protected float _shortestPathLength;
     protected FetchGamePhysicsTrainingArena.TaskType _taskType;
     protected GameObject _targetContainer;
+    protected FetchGamePhysicsTrainingArena fetchArena;
 
     /// <summary>
     /// Called after the Setup function for <see cref="FetchGamePhysicsTrainingArena"/>).
@@ -78,12 +79,16 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         }
         if (cameraSensor.Camera == null)
         {
-            GameObject ceilingCamera = GameObject.Find("AgentCamera");
-            cameraSensor.Camera = ceilingCamera.GetComponent<Camera>();
+            GameObject sensorCamera = GameObject.Find("AgentCamera");
+            sensorCamera.AddComponent<ReplaceShaderEffect>();
+            Camera sensorCameraComponent = sensorCamera.GetComponent<Camera>();
+            sensorCameraComponent.backgroundColor = Color.white;
+            sensorCameraComponent.farClipPlane = 5.0f; // Set so that the depth works as expected.
+            cameraSensor.Camera = sensorCameraComponent;
             cameraSensor.Grayscale = true;
-            cameraSensor.Width = 64;
-            cameraSensor.Height = 64;
-            cameraSensor.ObservationStacks = 2; // Use two stacked observations; have tried 4 but it was too slow.
+            cameraSensor.Width = 224;
+            cameraSensor.Height = 224;
+            cameraSensor.ObservationStacks = 2; // Use two stacked observations; have tried 4 but it was too slow; have tried 1 but seems to learn slowlier.
         }
 
         // Set the field of view degree (single direction) from the MaxRayDegree used by the raySensor.
@@ -119,7 +124,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
             _isGrounded = false;
         }
 
-        // Count the distance traveled since the last timestep and update the last position.
+        // Add the distance traveled since the last timestep and update the last position.
         _episodePathLength += Vector3.Distance(transform.position, _lastPosition);
         _lastPosition = transform.position;
 
@@ -172,52 +177,55 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
             return;
         }
         
-        float ballObserved = IsBallObservable() ? 1 : 0;
-        if ((_ball == null) || (_ballRigidBody == null) || (ballObserved == 0))
-        {
-            sensor.AddObservation(new float[VectorObservationSize]);
-            return;
-        }
+        // float ballObserved = IsBallObservable() ? 1 : 0;
+        // if ((_ball == null) || (_ballRigidBody == null) || (ballObserved == 0))
+        // {
+        //     sensor.AddObservation(new float[VectorObservationSize]);
+        //     return;
+        // }
 
-        // Indicator that encodes if the agent can see the ball with 1 indicating yes and 0 if not.
-        sensor.AddObservation(ballObserved);
+        // // Indicator that encodes if the agent can see the ball with 1 indicating yes and 0 if not.
+        // sensor.AddObservation(ballObserved);
 
         // Normalize observations to [0, 1] or [-1, 1]
         // https://github.com/Unity-Technologies/ml-agents/blob/main/docs/Learning-Environment-Design-Agents.md#normalization
 
-        Vector3 toBall = _ball.transform.position - transform.position;
-        float angleForward = SignedAngleNormalized(transform.forward, toBall);
-        // One observation
-        sensor.AddObservation(angleForward);
+        // Vector3 toBall = _ball.transform.position - transform.position;
+        // float angleForward = SignedAngleNormalized(transform.forward, toBall);
+        // // One observation
+        // sensor.AddObservation(angleForward);
 
-        // One observation
-        // Dividing makes it a relative distance
+        // For normalization
         float turfDiameter = GetTurfDiameter();
-        sensor.AddObservation(toBall.magnitude / turfDiameter);
 
-        Vector3 ballVelocity = _ballRigidBody.velocity;
+        // // One observation
+        // // Dividing makes it a relative distance
+        // sensor.AddObservation(toBall.magnitude / turfDiameter);
 
-        // Angle will be 0 if the ball is moving directly away from the agent,
-        // or if the ball is not moving.  Angle will be negative if the ball is moving
-        // to the left of the agent's forward direction, and positive for the right.
-        // Angle will be 1 (or maybe -1) if the ball is moving directly towards the agent.
-        float angleVelocity = SignedAngleNormalized(transform.forward, ballVelocity);
-        // One observation
-        sensor.AddObservation(angleVelocity);
+        // Vector3 ballVelocity = _ballRigidBody.velocity;
+
+        // // Angle will be 0 if the ball is moving directly away from the agent,
+        // // or if the ball is not moving.  Angle will be negative if the ball is moving
+        // // to the left of the agent's forward direction, and positive for the right.
+        // // Angle will be 1 (or maybe -1) if the ball is moving directly towards the agent.
+        // float angleVelocity = SignedAngleNormalized(transform.forward, ballVelocity);
+        // // One observation
+        // sensor.AddObservation(angleVelocity);
+
+        // // Normalize
+        // float ballSpeed = ballVelocity.magnitude / turfDiameter;
+        // // But this normalization may make the values very small, so use a heuristic to increase them
+        // ballSpeed = Mathf.Clamp01(ballSpeed * speedScale);
+        // // One observation
+        // sensor.AddObservation(ballSpeed);
 
         // Normalize
         float agentSpeed = _agentRigidbody.velocity.magnitude / turfDiameter;
-        float ballSpeed = ballVelocity.magnitude / turfDiameter;
-
         // But this normalization may make the values very small, so use a heuristic to increase them
         float speedScale = 4.0f;
         agentSpeed = Mathf.Clamp01(agentSpeed * speedScale);
-        ballSpeed = Mathf.Clamp01(ballSpeed * speedScale);
-
         // One observation
         sensor.AddObservation(agentSpeed);
-        // One observation
-        sensor.AddObservation(ballSpeed);
     }
 
     /// <summary>
@@ -236,6 +244,9 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         // Set the field of view degree (single direction) from the MaxRayDegree used by the raySensor.
         GameObject raySensor = GameObject.Find("RaysForward");
         fieldOfViewDegree = raySensor != null ? raySensor.GetComponent<RayPerceptionSensorComponent3D>().MaxRayDegrees : 30;
+
+        // Get the arena reference.
+        fetchArena = GetComponentInParent<FetchGamePhysicsTrainingArena>();
     }
 
     /// <summary>
@@ -267,16 +278,28 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         // Penalize the agent for colliding with the wrong container.
         if (_taskType == FetchGamePhysicsTrainingArena.TaskType.containment)
         {
-            if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_CONTAINER) && c.gameObject != _targetContainer)
+            GameObject colliderParentGameObject = c.gameObject.transform.parent.gameObject;
+            if (colliderParentGameObject.CompareTag(FetchGamePhysicsTrainingArena.TAG_CONTAINER))
             {
-                SetReward(-1.0f);
-                Debug.Log(transform.parent.name + " FetchAgent.OnCollisionEnter: Penalize for colliding with wrong container and end episode.");
-                EndEpisode();
+                _targetContainer = fetchArena.targetContainer;
+                if (colliderParentGameObject != _targetContainer)
+                {
+                    // Punish the agent for colliding with the wrong container.
+                    SetReward(-1.0f);
+                    Debug.Log(transform.parent.name + " FetchAgent.OnCollisionEnter: Penalize for colliding with wrong container and end episode.");
+                    EndEpisode();
+                } else if (colliderParentGameObject == _targetContainer && Academy.Instance.EnvironmentParameters.GetWithDefault("ball_fetched_threshold", 0.0f) > 0.0f)
+                {
+                    // Reward the agent for colliding with the correct container.
+                    Debug.Log("FetchAgent.OnCollisionEnter: Correct container collision.");
+                    AddFetchedReward();
+                }
             }
         }
 
         // TODO: There is no penalty for a collision with the obstacle, to keep training from being
         // too difficult.  Is this approach right?  Should there be no penalty for any collision?
+        // I suggest remove this penalty since multiple collision soon results in abnomally large negative reward.
         if (c.CompareTag(FetchGamePhysicsTrainingArena.TAG_BOUNDARY) || c.CompareTag(FetchGamePhysicsTrainingArena.TAG_RAMP))
         {
             if (trainingMode)
@@ -326,18 +349,12 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         // Get current task type.
         _taskType = GetTaskType();
 
-        // Get the target container if applicable.
-        FetchGamePhysicsTrainingArena fetchArena = GetComponentInParent<FetchGamePhysicsTrainingArena>();
-        if (_taskType == FetchGamePhysicsTrainingArena.TaskType.containment)
-        {
-            _targetContainer = fetchArena.targetContainer;
-        }
-
         _shortestPathLength = fetchArena.GetShortestPathLength();
     }
 
     private void AddFetchedReward()
     {
+        // Reward the agent for fetching the ball, having the correct orientation relative to the ball. and fetching the ball fast.
         Vector3 toBall = (_ball.transform.position - transform.position);
         float speedBonusProportion = Academy.Instance.EnvironmentParameters.GetWithDefault("speed_bonus", 0.8f);
         float orientationBonus = 0.5f * (1 - speedBonusProportion) * Mathf.Clamp01(Vector3.Dot(transform.forward.normalized, toBall.normalized));
@@ -367,7 +384,7 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
 
     private float SignedAngleNormalized(Vector3 a, Vector3 b)
     {
-        return Vector3.SignedAngle(a, b, transform.up) / 180;
+        return Vector3.SignedAngle(a, b, transform.up) / 180f;
         // // [0, 180] for left or right
         // float angleBetween = Vector3.Angle(a.normalized, b.normalized);
         // // Negative for left
@@ -376,6 +393,10 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         // return sign * angleBetween / 180;
     }
 
+    /// <summary>
+    /// Used in vector observation mode to determine if the agent should be able to see the ball.
+    /// This boolean is also used as an observation recorded in the vector observation.
+    /// </summary> 
     private bool IsBallObservable()
     {
         Vector3 rayInit = transform.TransformPoint(BodyScale / 3);
@@ -389,7 +410,11 @@ public class FetchGamePhysicsTrainingAgent : Janelia.EasyMLAgentGrounded
         return atFront && !blocked;
     }
 
-    public bool CheckGrounded()
+    /// <summary>
+    /// Check if the agent is grounded.
+    /// An alternative implementation is to use a downward raycast.
+    /// </summary>
+    private bool CheckGrounded()
     {
         return _isGrounded;
     }

@@ -45,7 +45,9 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
     protected bool _useContainer = false;
     protected int numContainers = 1;
     public GameObject targetContainer { get; protected set; }
-    protected float _hollowCylInnerRadius = 0.1f / 1.3f;
+    // These convertion factors for the hollowCyl
+    // are manually measured from the Unity editor.
+    protected float _hollowCylInnerRadius = 0.1f / 1.5f;
     protected float _hollowCylOuterRadius = 0.1f / 1.1f;
     protected float _hollowCylHeight = 0.1f / 0.75f;
 
@@ -96,6 +98,9 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
         {
             name = "TrainingArena";
         }
+
+        // Disable shadows from the light source.
+        GameObject.Find("Directional Light").GetComponent<Light>().shadows = LightShadows.None;
     }
 
     private void Reparent()
@@ -421,11 +426,11 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
                 float rampPadding = Mathf.Max(_rampSize.x, _rampSize.z);
                 
                 // Use OverlapBox to check if it's safe to place the agent.
-                Collider[] colliders = CheckOverlap(agentTransform.position, agent.GetComponent<FetchGamePhysicsTrainingAgent>().BodyScale, Quaternion.identity);
-                safe = colliders.Length == 1; // 1 because the turf is always detected. TODO: Maybe lifting this overlapbox would remove turf.
+                // Collider[] colliders = CheckOverlap(agentTransform.position, agent.GetComponent<FetchGamePhysicsTrainingAgent>().BodyScale, Quaternion.identity);
+                // safe = colliders.Length == 1; // 1 because the turf is always detected.
 
                 // // Use distance to check if it's safe to place the agent.
-                // safe = Vector3.Distance(ramp.transform.localPosition, p) > padding + rampPadding;
+                safe = Vector3.Distance(ramp.transform.localPosition, p) > padding + rampPadding;
             }
 
             // Make the agent face the center of the arena.
@@ -440,6 +445,7 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
 
     private void PlaceBall()
     {
+        // If the number of balls doesn't match the number of balls, create or destroy balls.
         List<GameObject> balls = Janelia.EasyMLRuntimeUtils.FindChildrenWithTag(gameObject, TAG_BALL);
         if (balls.Count > numBalls)
         {
@@ -542,6 +548,7 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
 
     private void PlaceContainer()
     {
+        // If the number of containers doesn't match the number of balls, create or destroy containers.
         List<GameObject> containers = Janelia.EasyMLRuntimeUtils.FindChildrenWithTag(gameObject, TAG_CONTAINER);
         if (containers.Count > numContainers)
         {
@@ -569,20 +576,24 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
 
         if (containers != null)
         {
+            List<GameObject> placedContainers = new List<GameObject>();
+
             // Randomly choose a container to contain the ball.
             int index = _rng.Next(containers.Count);
-            GameObject _targetContainer = containers[index];
-            UpdateContainerMetrics(_targetContainer);
+            targetContainer = containers[index];
+            UpdateContainerMetrics(targetContainer);
             GameObject ball = Janelia.EasyMLRuntimeUtils.FindChildWithTag(gameObject, TAG_BALL);
             Vector3 p = ball.transform.localPosition;
-            p.y = _targetContainer.transform.localPosition.y;
-            _targetContainer.transform.localPosition = p;
-
+            p.y = targetContainer.transform.localPosition.y;
+            targetContainer.transform.localPosition = p;
             containers.RemoveAt(index);
+            placedContainers.Add(targetContainer);
+
             foreach (GameObject container in containers)
             {
                 UpdateContainerMetrics(container);
                 Transform containerTransform = container.transform;
+                float padding = Mathf.Max(containerTransform.localScale.x, containerTransform.localScale.z) * 2f * _hollowCylOuterRadius;
                 float angle = 0;
                 float radius = 0;
                 int attempts = 0;
@@ -595,16 +606,26 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
                     p *= radius;
                     p.y = containerTransform.localPosition.y;
                     containerTransform.localPosition = p;
-                    Collider[] colliders = CheckOverlap(containerTransform.position, containerTransform.localScale * _hollowCylOuterRadius, Quaternion.identity);
-                    safe = colliders.Length == 1; // 1 because the turf is always detected. TODO: Maybe lifting this overlapbox would remove turf.
-                    if (safe) Debug.Log("Container " + container.name + " is safe.");
+
+                    // // Physics.OverlapBox based collision detection but this is not good because of the update issue.
+                    // Collider[] colliders = CheckOverlap(containerTransform.position, containerTransform.localScale * _hollowCylOuterRadius, Quaternion.identity);
+                    // safe = colliders.Length == 1; // 1 because the turf is always detected.
+
+                    // Distance based safe check.
+                    safe = true;
+                    foreach (GameObject placedContainer in placedContainers)
+                    {
+                        safe = safe && Vector3.Distance(placedContainer.transform.localPosition, containerTransform.localPosition) > padding;
+                    }
                 }
+                placedContainers.Add(container);
             }
         }
     }
 
     private void PlaceObstacle()
     {
+        // If the number of obstacles doesn't match the number of balls, create or destroy obstacles.
         GameObject obstacle = Janelia.EasyMLRuntimeUtils.FindChildWithTag(gameObject, TAG_OBSTACLE);
         if (obstacle == null)
         {
@@ -680,7 +701,7 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
                     angle = UnityEngine.Random.Range(0, 360);
                     Quaternion q = Quaternion.Euler(0, angle + obstacle.transform.localRotation.y, 0);
                     Collider[] colliders = CheckOverlap(obstacle.transform.position, obstacle.transform.localScale, q);
-                    if (colliders.Length == 1) // 1 because the turf is always detected. TODO: Maybe lifting this overlapbox would remove turf.
+                    if (colliders.Length == 1) // 1 because the turf is always detected.
                     {
                         break;
                     }
@@ -702,7 +723,7 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
                 obstaclePosition.y = _turfY + _turfThickness / 2 + _obstacleHeight / 2;
                 obstacle.transform.localPosition = obstaclePosition;
 
-                // TODO: Rotate the obstacle to be perpendicular to the agent's view of the ball.
+                // Rotate the obstacle to be perpendicular to the agent's view of the ball.
                 angle = -Vector3.SignedAngle(agentToBall, Vector3.forward, Vector3.up) + 90f;
                 obstacle.transform.localEulerAngles = new Vector3(0, angle, 0);
                 break;
@@ -743,7 +764,7 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
             Vector3 scale = Vector3.Max(_agentScale, _ballRadius * Vector3.one);
             scale /= _hollowCylInnerRadius;
             scale.y = scale.y * _hollowCylInnerRadius / _hollowCylHeight;
-            hollowCyl.transform.localScale = scale;
+            hollowCyl.transform.localScale = scale *  1.6f; // Multiplied by a factor to make the container easier to jump in.
             hollowCyl.transform.localPosition = new Vector3(0, _turfY + _turfThickness / 2 + 0.5f * _hollowCylHeight * scale.y, 0);
 
             foreach(Transform part in hollowCyl.transform.GetComponentsInChildren<Transform>(includeInactive: true))
@@ -756,6 +777,10 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
         }
     }
 
+    // TODO: Rewrite everything that uses this method to use distance based overlap checks.
+    // This approach of checking for overlap doesn't work because it doesn't reflect the updated position
+    // of the game objects. Updating the positions is possible through Physics.Simulate but it doesn't work here
+    // because this is in a Physics callback.
     private Collider[] CheckOverlap(Vector3 p, Vector3 s, Quaternion q)
     {
         // Physics.autoSimulation = false; // Required by Physics.Simulate().
@@ -765,6 +790,8 @@ public class FetchGamePhysicsTrainingArena : Janelia.EasyMLArena
         return colliders;
     }
 
+    // Get the shortest distance between the agent and any ball.
+    // Used for calculating the path length penalty.
     public float GetShortestPathLength()
     {
         float shortest = 0;

@@ -2,8 +2,8 @@ behaviors:
   FetchGamePhysics:
     trainer_type: ppo
     hyperparameters:
-      batch_size: 2048
-      buffer_size: 20480
+      batch_size: 256 # Significantly lowered because visual observation takes a lot of memory
+      buffer_size: 2560 # Significantly lowered because visual observation takes a lot of memory
       learning_rate: 0.0003
       beta: 0.005
       epsilon: 0.2
@@ -26,30 +26,33 @@ behaviors:
       extrinsic:
         gamma: 0.99
         strength: 1.0
+      gail: # https://github.com/Unity-Technologies/ml-agents/blob/main/docs/ML-Agents-Overview.md
+        gamma: 0.99
+        strength: 0.01
         network_settings:
           normalize: false
           hidden_units: 128
           num_layers: 2
           vis_encode_type: resnet
-          goal_conditioning_type: hyper
-          deterministic: false
+        learning_rate: 0.0003
+        use_actions: false
+        use_vail: false
+        demo_path: FetchGamePhysics/FetchArenaProject/Assets/ML-Agents/Demos/ChenxiDemo_2.demo
       rnd:
         learning_rate: 3e-4
         strength: 0.01
         gamma: 0.99
-        network_settings:
-          normalize: false
-          hidden_units: 128
-          num_layers: 2
-          vis_encode_type: resnet
-          goal_conditioning_type: hyper
-          deterministic: false
     keep_checkpoints: 5
     checkpoint_interval: 10000
     max_steps: 15000000
     time_horizon: 128
     summary_freq: 10000
     threaded: false
+    behavioral_cloning:
+      demo_path: FetchGamePhysics/FetchArenaProject/Assets/ML-Agents/Demos/ChenxiDemo_2.demo
+      steps: 50000
+      strength: 1.0
+      samples_per_update: 0
 environment_parameters:
   obstacle_scale_vs_ramp:
     curriculum:
@@ -231,7 +234,7 @@ environment_parameters:
         value: 0.3
       - name: LessonFinal
         value: 0.5
-    path_length_penalty:
+  path_length_penalty:
     curriculum:
       - name: LessonA
         completion_criteria:
